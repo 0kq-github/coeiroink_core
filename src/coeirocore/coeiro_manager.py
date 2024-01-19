@@ -129,8 +129,9 @@ class AudioManager:
         self.meta_manager = MetaManager()
         self.previous_style_id = self.meta_manager.get_metas_dict()[0]['styles'][0]['id']
         self.previous_speed_scale = 1.0
+        self.cache_speaker_models = {}
 
-        self.current_speaker_model: EspnetModel = EspnetModel(
+        self.cache_speaker_models[f"{self.previous_style_id}-{self.previous_speed_scale}"] = EspnetModel(
             model_path=self.meta_manager.id_model_map[self.previous_style_id].model_path,
             config_path=self.meta_manager.id_model_map[self.previous_style_id].config_path,
             speed_scale=self.previous_speed_scale,
@@ -150,8 +151,10 @@ class AudioManager:
             output_sampling_rate: int = 44100
     ):
         # speaker_load
-        if self.previous_style_id != style_id or self.previous_speed_scale != speed_scale:
-            self.current_speaker_model = EspnetModel(
+        if f"{style_id}-{speed_scale}" not in self.cache_speaker_models:
+            if len(self.cache_speaker_models) >= 10:
+                self.cache_speaker_models.pop(list(self.cache_speaker_models.keys())[0])
+            self.cache_speaker_models[f"{style_id}-{speed_scale}"] = EspnetModel(
                 model_path=self.meta_manager.id_model_map[style_id].model_path,
                 config_path=self.meta_manager.id_model_map[style_id].config_path,
                 speed_scale=1/speed_scale,
@@ -160,10 +163,12 @@ class AudioManager:
             self.previous_style_id = style_id
             self.previous_speed_scale = speed_scale
 
+        current_speaker_model = self.cache_speaker_models[f"{style_id}-{speed_scale}"]
+
         # synthesis
         if not isinstance(text, str):
-            text = self.current_speaker_model.tokens2ids(text)
-        wav = self.current_speaker_model.make_voice(text)
+            text = current_speaker_model.tokens2ids(text)
+        wav = current_speaker_model.make_voice(text)
 
         # post-processing
         wav = self.trim(wav)
